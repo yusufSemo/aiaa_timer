@@ -6,6 +6,8 @@ export default function Home() {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [seconds, setSeconds] = useState<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Initialize audio context
   useEffect(() => {
@@ -19,6 +21,53 @@ export default function Home() {
       }
     };
   }, []);
+
+  // Request wake lock when timer starts, release when it stops
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      try {
+        // Try Wake Lock API first
+        if (navigator.wakeLock && isRunning) {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+          console.log('Wake Lock activated');
+        }
+      } catch (err) {
+        console.log('Wake Lock error:', err);
+      }
+      
+      // Fallback: Use hidden video to keep screen awake
+      if (videoRef.current && isRunning) {
+        videoRef.current.play().catch(err => console.log('Video play error:', err));
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      if (wakeLockRef.current) {
+        try {
+          await wakeLockRef.current.release();
+          wakeLockRef.current = null;
+          console.log('Wake Lock released');
+        } catch (err) {
+          console.log('Wake Lock release error:', err);
+        }
+      }
+      
+      // Stop video fallback
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
+    };
+
+    if (isRunning) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+
+    return () => {
+      releaseWakeLock();
+    };
+  }, [isRunning]);
 
   // Play bell sound
   const playBell = () => {
@@ -105,8 +154,18 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-3 sm:p-6">
+      {/* Hidden video to keep screen awake on iOS/older browsers */}
+      <video
+        ref={videoRef}
+        loop
+        muted
+        playsInline
+        className="hidden"
+        src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAu1tZGF0AAACrQYF//+p3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE0OCByMjY0MyA1YzY1NzA0IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxNSAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTMgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0zIGJfcHlyYW1pZD0yIGJfYWRhcHQ9MSBiX2JpYXM9MCBkaXJlY3Q9MSB3ZWlnaHRiPTEgb3Blbl9nb3A9MCB3ZWlnaHRwPTIga2V5aW50PTI1MCBrZXlpbnRfbWluPTEwIHNjZW5lY3V0PTQwIGludHJhX3JlZnJlc2g9MCByY19sb29rYWhlYWQ9NDAgcmM9Y3JmIG1idHJlZT0xIGNyZj0yMy4wIHFjb21wPTAuNjAgcXBtaW49MCBxcG1heD02OSBxcHN0ZXA9NCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4wMACAAAAA/GWIhAAR//73hYmCUC5VXkjQXCrQNyA5kCnhqLs0AAAAMQZ+kQAH//7hYlH/93+f/6QvJwdwEEBN3LfWx94Aw8b/wQEwAAE5ASaAAA0="
+      />
+      
       <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-12 w-full max-w-md text-center">
-        <h1 className="text-xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-8">Luft Orgs Timer</h1>
+        <h1 className="text-xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-8">LuftOrgs Timer</h1>
         
         <div className="mb-6 sm:mb-12">
           <div className="font-mono font-bold text-indigo-600 mb-2 sm:mb-4 leading-none whitespace-nowrap flex justify-center" style={{ fontSize: 'clamp(2.5rem, 12vw, 5rem)' }}>
