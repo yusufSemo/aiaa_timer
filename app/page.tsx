@@ -27,8 +27,8 @@ export default function Home() {
     const requestWakeLock = async () => {
       try {
         // Try Wake Lock API first
-        if (navigator.wakeLock && isRunning) {
-          wakeLockRef.current = await navigator.wakeLock.request('screen');
+        if ('wakeLock' in navigator && isRunning) {
+          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
           console.log('Wake Lock activated');
         }
       } catch (err) {
@@ -99,10 +99,15 @@ export default function Home() {
         setSeconds(prevSeconds => {
           const newSeconds = prevSeconds + 1;
           
-          // Check for bell times (60, 70, 75 seconds, then loop)
-          const timeInCycle = newSeconds % 75;
-          if (timeInCycle === 60 || timeInCycle === 70 || timeInCycle === 0) {
+          // Check for bell times (60, 70, 72, 75 seconds, then auto-reset at 120)
+          const timeInCycle = newSeconds % 120;
+          if (timeInCycle === 60 || timeInCycle === 70 || timeInCycle === 72 || timeInCycle === 75) {
             playBell();
+          }
+          
+          // Auto-reset at 120 seconds
+          if (newSeconds === 120) {
+            return 0;
           }
           
           return newSeconds;
@@ -133,23 +138,28 @@ export default function Home() {
   };
 
   const getNextBellTime = (currentSeconds: number): number => {
-    const timeInCycle = currentSeconds % 75;
-    
-    if (timeInCycle < 60) {
-      return 60 - timeInCycle; // Time until first bell at 60s
-    } else if (timeInCycle < 70) {
-      return 70 - timeInCycle; // Time until second bell at 70s
+    if (currentSeconds < 60) {
+      return 60 - currentSeconds;
+    } else if (currentSeconds < 70) {
+      return 70 - currentSeconds;
+    } else if (currentSeconds < 72) {
+      return 72 - currentSeconds;
+    } else if (currentSeconds < 75) {
+      return 75 - currentSeconds;
     } else {
-      return 75 - timeInCycle; // Time until third bell at 75s
+      return 120 - currentSeconds; // Time until reset
     }
   };
 
-  const formatTime = (totalSeconds: number): string => {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const getDeduction = (currentSeconds: number): string => {
+    if (currentSeconds >= 75) {
+      return '-0.5';
+    } else if (currentSeconds >= 72) {
+      return '-0.3';
+    } else if (currentSeconds >= 70) {
+      return '-0.1';
+    }
+    return '';
   };
 
   return (
@@ -165,14 +175,19 @@ export default function Home() {
       />
       
       <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-12 w-full max-w-md text-center">
-        <h1 className="text-xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-8">LuftOrgs Timer</h1>
+        <h1 className="text-xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-8">Luft Orgs FX Timer</h1>
         
         <div className="mb-6 sm:mb-12">
-          <div className="font-mono font-bold text-indigo-600 mb-2 sm:mb-4 leading-none whitespace-nowrap flex justify-center" style={{ fontSize: 'clamp(2.5rem, 12vw, 5rem)' }}>
-            {formatTime(seconds)}
+          <div className="font-mono font-bold text-indigo-600 mb-2 sm:mb-4 leading-none whitespace-nowrap flex justify-center items-baseline gap-4" style={{ fontSize: 'clamp(2.5rem, 12vw, 5rem)' }}>
+            <span>{seconds}s</span>
+            {getDeduction(seconds) && (
+              <span className="text-red-500" style={{ fontSize: 'clamp(2rem, 9vw, 4rem)' }}>
+                {getDeduction(seconds)}
+              </span>
+            )}
           </div>
           <div className="text-sm sm:text-lg text-gray-600 font-medium">
-            Next bell in {getNextBellTime(seconds)}s
+            {seconds < 75 ? `Next bell in ${getNextBellTime(seconds)}s` : `Resets in ${getNextBellTime(seconds)}s`}
           </div>
         </div>
         
@@ -188,7 +203,7 @@ export default function Home() {
         </button>
         
         <div className="mt-4 sm:mt-8 text-xs sm:text-sm text-gray-400">
-          Bells at 60s, 70s, and 75s
+          Bells at 60s, 70s, 72s, 75s • Auto-reset at 120s
         </div>
       </div>
     </div>
