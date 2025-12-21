@@ -1,65 +1,136 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
 
 export default function Home() {
+  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [seconds, setSeconds] = useState<number>(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Initialize audio context
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  // Play bell sound
+  const playBell = () => {
+    if (!audioContextRef.current) return;
+    
+    const ctx = audioContextRef.current;
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.5);
+  };
+
+  // Timer logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
+    if (isRunning) {
+      interval = setInterval(() => {
+        setSeconds(prevSeconds => {
+          const newSeconds = prevSeconds + 1;
+          
+          // Check for bell times (60, 70, 75 seconds, then loop)
+          const timeInCycle = newSeconds % 75;
+          if (timeInCycle === 60 || timeInCycle === 70 || timeInCycle === 0) {
+            playBell();
+          }
+          
+          return newSeconds;
+        });
+      }, 1000);
+    } else {
+      if (interval) clearInterval(interval);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRunning]);
+
+  const toggleTimer = () => {
+    if (isRunning) {
+      // Stop button - reset timer
+      setIsRunning(false);
+      setSeconds(0);
+    } else {
+      // Start button
+      setIsRunning(true);
+      // Resume audio context on user interaction
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+    }
+  };
+
+  const getNextBellTime = (currentSeconds: number): number => {
+    const timeInCycle = currentSeconds % 75;
+    
+    if (timeInCycle < 60) {
+      return 60 - timeInCycle; // Time until first bell at 60s
+    } else if (timeInCycle < 70) {
+      return 70 - timeInCycle; // Time until second bell at 70s
+    } else {
+      return 75 - timeInCycle; // Time until third bell at 75s
+    }
+  };
+
+  const formatTime = (totalSeconds: number): string => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-3 sm:p-6">
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-12 w-full max-w-md text-center">
+        <h1 className="text-xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-8">Luft Orgs Timer</h1>
+        
+        <div className="mb-6 sm:mb-12">
+          <div className="font-mono font-bold text-indigo-600 mb-2 sm:mb-4 leading-none whitespace-nowrap flex justify-center" style={{ fontSize: 'clamp(2.5rem, 12vw, 5rem)' }}>
+            {formatTime(seconds)}
+          </div>
+          <div className="text-sm sm:text-lg text-gray-600 font-medium">
+            Next bell in {getNextBellTime(seconds)}s
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        
+        <button
+          onClick={toggleTimer}
+          className={`w-full py-5 sm:py-6 px-6 rounded-2xl text-xl sm:text-3xl font-bold transition-all duration-200 active:scale-95 touch-manipulation ${
+            isRunning
+              ? 'bg-red-500 active:bg-red-600 text-white shadow-lg shadow-red-500/50'
+              : 'bg-indigo-500 active:bg-indigo-600 text-white shadow-lg shadow-indigo-500/50'
+          }`}
+        >
+          {isRunning ? 'Stop' : 'Start'}
+        </button>
+        
+        <div className="mt-4 sm:mt-8 text-xs sm:text-sm text-gray-400">
+          Bells at 60s, 70s, and 75s
         </div>
-      </main>
+      </div>
     </div>
   );
 }
