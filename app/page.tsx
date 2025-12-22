@@ -105,8 +105,9 @@ export default function Home() {
             playBell();
           }
           
-          // Auto-reset at 120 seconds
+          // Auto-stop at 120 seconds
           if (newSeconds === 120) {
+            setIsRunning(false);
             return 0;
           }
           
@@ -203,7 +204,7 @@ export default function Home() {
         </button>
         
         <div className="mt-4 sm:mt-8 text-xs sm:text-sm text-gray-400">
-          Bells at 60s, 70s, 72s, 75s • Auto-reset at 120s
+          Bells at 60s, 70s, 72s, 75s • Auto-stop at 120s
         </div>
       </div>
     </div>
