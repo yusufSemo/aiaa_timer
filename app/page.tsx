@@ -5,19 +5,22 @@ import { useState, useEffect, useRef } from 'react';
 export default function Home() {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [seconds, setSeconds] = useState<number>(0);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Initialize audio context
+  // Initialize audio element
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const AudioContextConstructor = window.AudioContext || (window as Window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      audioContextRef.current = new AudioContextConstructor();
+      // Create audio element with your sound file
+      // Place your sound file in the /public folder and reference it here
+      audioRef.current = new Audio('/bell.mp3'); // Change this to your sound file name
+      audioRef.current.preload = 'auto';
     }
     return () => {
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
       }
     };
   }, []);
@@ -26,16 +29,14 @@ export default function Home() {
   useEffect(() => {
     const requestWakeLock = async () => {
       try {
-        // Try Wake Lock API first
-        if ('wakeLock' in navigator && isRunning) {
-          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        if ('wakeLock' in navigator && isRunning && navigator.wakeLock) {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
           console.log('Wake Lock activated');
         }
       } catch (err) {
         console.log('Wake Lock error:', err);
       }
       
-      // Fallback: Use hidden video to keep screen awake
       if (videoRef.current && isRunning) {
         videoRef.current.play().catch(err => console.log('Video play error:', err));
       }
@@ -52,7 +53,6 @@ export default function Home() {
         }
       }
       
-      // Stop video fallback
       if (videoRef.current) {
         videoRef.current.pause();
       }
@@ -71,23 +71,11 @@ export default function Home() {
 
   // Play bell sound
   const playBell = () => {
-    if (!audioContextRef.current) return;
+    if (!audioRef.current) return;
     
-    const ctx = audioContextRef.current;
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-    
-    oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + 0.5);
+    // Reset to start if already playing
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(err => console.log('Audio play error:', err));
   };
 
   // Timer logic
@@ -125,15 +113,13 @@ export default function Home() {
 
   const toggleTimer = () => {
     if (isRunning) {
-      // Stop button - reset timer
       setIsRunning(false);
       setSeconds(0);
     } else {
-      // Start button
       setIsRunning(true);
-      // Resume audio context on user interaction
-      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume();
+      // Preload audio on user interaction (required for mobile)
+      if (audioRef.current) {
+        audioRef.current.load();
       }
     }
   };
@@ -148,7 +134,7 @@ export default function Home() {
     } else if (currentSeconds < 75) {
       return 75 - currentSeconds;
     } else {
-      return 120 - currentSeconds; // Time until reset
+      return 120 - currentSeconds;
     }
   };
 
@@ -165,7 +151,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-3 sm:p-6">
-      {/* Hidden video to keep screen awake on iOS/older browsers */}
       <video
         ref={videoRef}
         loop
