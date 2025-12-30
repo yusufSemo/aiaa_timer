@@ -9,13 +9,26 @@ export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [audioReady, setAudioReady] = useState(false);
 
   // Initialize audio elements
   useEffect(() => {
     if (typeof window !== 'undefined') {
       // Xander's bell sound (mp3 file)
-      audioRef.current = new Audio('/bell.mp3');
-      audioRef.current.preload = 'auto';
+      const audio = new Audio('/bell.mp3');
+      audio.preload = 'auto';
+      
+      // Set up event listeners to track when audio is ready
+      audio.addEventListener('canplaythrough', () => {
+        console.log('Audio ready to play');
+        setAudioReady(true);
+      });
+      
+      audio.addEventListener('error', (e) => {
+        console.error('Audio error:', e);
+      });
+      
+      audioRef.current = audio;
       
       // Yusuf's synthesized tone (Web Audio API)
       const AudioContextConstructor = window.AudioContext || (window as Window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -44,17 +57,14 @@ export default function Home() {
       }
     }
     
-    // Unlock HTML Audio element by playing and immediately pausing
+    // Unlock HTML Audio element
     if (audioRef.current) {
       try {
-        audioRef.current.muted = true;
-        await audioRef.current.play();
-        audioRef.current.pause();
-        audioRef.current.muted = false;
-        audioRef.current.currentTime = 0;
-        console.log('Audio element unlocked');
+        // Load and prepare the audio
+        audioRef.current.load();
+        console.log('Audio loaded');
       } catch (err) {
-        console.log('Audio unlock error:', err);
+        console.log('Audio load error:', err);
       }
     }
   }, []);
@@ -105,12 +115,26 @@ export default function Home() {
 
   // Play Xander's bell sound (mp3) - for 60s and 70s
   const playXanderBell = useCallback(() => {
-    if (!audioRef.current) return;
+    console.log('Attempting to play Xander bell, audioRef:', !!audioRef.current);
     
-    // Clone the audio element to allow overlapping plays and avoid state issues
-    const audioClone = audioRef.current.cloneNode() as HTMLAudioElement;
-    audioClone.volume = 1;
-    audioClone.play().catch(err => console.log('Audio play error:', err));
+    if (!audioRef.current) {
+      console.log('No audio ref');
+      return;
+    }
+    
+    // Reset and play
+    audioRef.current.currentTime = 0;
+    const playPromise = audioRef.current.play();
+    
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          console.log('Xander bell playing successfully');
+        })
+        .catch(err => {
+          console.error('Audio play error:', err);
+        });
+    }
   }, []);
 
   // Play Yusuf's synthesized tone - for 72s and 75s
@@ -140,7 +164,15 @@ export default function Home() {
     oscillator.stop(ctx.currentTime + 0.5);
   }, []);
 
-  // Timer logic
+  // Timer logic - using refs to avoid stale closures
+  const playXanderBellRef = useRef(playXanderBell);
+  const playYusufToneRef = useRef(playYusufTone);
+  
+  useEffect(() => {
+    playXanderBellRef.current = playXanderBell;
+    playYusufToneRef.current = playYusufTone;
+  }, [playXanderBell, playYusufTone]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     
@@ -149,11 +181,15 @@ export default function Home() {
         setSeconds(prevSeconds => {
           const newSeconds = prevSeconds + 1;
           
+          console.log('Timer tick:', newSeconds);
+          
           // Bell times: 60s & 70s = Xander bell, 72s & 75s = Yusuf tone
           if (newSeconds === 60 || newSeconds === 70) {
-            playXanderBell();
+            console.log('Playing Xander bell at', newSeconds);
+            playXanderBellRef.current();
           } else if (newSeconds === 72 || newSeconds === 75) {
-            playYusufTone();
+            console.log('Playing Yusuf tone at', newSeconds);
+            playYusufToneRef.current();
           }
           
           // Auto-stop at 120 seconds
@@ -170,7 +206,7 @@ export default function Home() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isRunning, playXanderBell, playYusufTone]);
+  }, [isRunning]);
 
   const toggleTimer = async () => {
     // Always unlock audio on any button press
@@ -180,8 +216,26 @@ export default function Home() {
       setIsRunning(false);
       setSeconds(0);
     } else {
+      // Test play the audio to make sure it works (iOS requirement)
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        try {
+          await audioRef.current.play();
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+          console.log('Audio test play successful');
+        } catch (err) {
+          console.error('Audio test play failed:', err);
+        }
+      }
       setIsRunning(true);
     }
+  };
+
+  // Test button to verify audio works
+  const testSound = async () => {
+    await unlockAudio();
+    playXanderBell();
   };
 
   const getNextBellTime = (currentSeconds: number): number => {
@@ -210,10 +264,7 @@ export default function Home() {
   };
 
   return (
-    <div 
-      className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-3 sm:p-6"
-      onClick={unlockAudio} // Unlock audio on any tap on the page
-    >
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-3 sm:p-6">
       <video
         ref={videoRef}
         loop
@@ -251,9 +302,18 @@ export default function Home() {
           {isRunning ? 'Stop' : 'Start'}
         </button>
         
+        {/* Test button - remove this once confirmed working */}
+        <button
+          onClick={testSound}
+          className="mt-4 w-full py-2 px-4 rounded-xl text-sm font-medium bg-gray-200 active:bg-gray-300 text-gray-700"
+        >
+          Test Xander Sound
+        </button>
+        
         <div className="mt-4 sm:mt-8 text-xs sm:text-sm text-gray-400">
-          🔔 60s & 70s (bell) • 🎵 72s & 75s (ring) • Auto-reset at 120s
+          🔔 60s & 70s (Xander) • 🎵 72s & 75s (Yusuf) • Auto-reset at 120s
         </div>
+        
       </div>
     </div>
   );
