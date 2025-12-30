@@ -302,16 +302,9 @@ export default function Home() {
           {isRunning ? 'Stop' : 'Start'}
         </button>
         
-        {/* Test button - remove this once confirmed working */}
-        <button
-          onClick={testSound}
-          className="mt-4 w-full py-2 px-4 rounded-xl text-sm font-medium bg-gray-200 active:bg-gray-300 text-gray-700"
-        >
-          Test Xander Sound
-        </button>
-        
+
         <div className="mt-4 sm:mt-8 text-xs sm:text-sm text-gray-400">
-          🔔 60s & 70s (Xander) • 🎵 72s & 75s (Yusuf) • Auto-reset at 120s
+          🔔 60s & 70s (bell) • 🎵 72s & 75s (ring) • Auto-reset at 120s
         </div>
         
       </div>
