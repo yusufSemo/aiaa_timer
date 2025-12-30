@@ -1,28 +1,62 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 export default function Home() {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [seconds, setSeconds] = useState<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Initialize audio element
+  // Initialize audio elements
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // Create audio element with your sound file
-      // Place your sound file in the /public folder and reference it here
-      audioRef.current = new Audio('/bell.mp3'); // Change this to your sound file name
+      // Xander's bell sound (mp3 file)
+      audioRef.current = new Audio('/bell.mp3');
       audioRef.current.preload = 'auto';
+      
+      // Yusuf's synthesized tone (Web Audio API)
+      const AudioContextConstructor = window.AudioContext || (window as Window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioContextRef.current = new AudioContextConstructor();
     }
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
     };
+  }, []);
+
+  // Function to unlock/prepare all audio - call on every user interaction
+  const unlockAudio = useCallback(async () => {
+    // Unlock AudioContext
+    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+      try {
+        await audioContextRef.current.resume();
+        console.log('AudioContext resumed');
+      } catch (err) {
+        console.log('AudioContext resume error:', err);
+      }
+    }
+    
+    // Unlock HTML Audio element by playing and immediately pausing
+    if (audioRef.current) {
+      try {
+        audioRef.current.muted = true;
+        await audioRef.current.play();
+        audioRef.current.pause();
+        audioRef.current.muted = false;
+        audioRef.current.currentTime = 0;
+        console.log('Audio element unlocked');
+      } catch (err) {
+        console.log('Audio unlock error:', err);
+      }
+    }
   }, []);
 
   // Request wake lock when timer starts, release when it stops
@@ -69,14 +103,42 @@ export default function Home() {
     };
   }, [isRunning]);
 
-  // Play bell sound
-  const playBell = () => {
+  // Play Xander's bell sound (mp3) - for 60s and 70s
+  const playXanderBell = useCallback(() => {
     if (!audioRef.current) return;
     
-    // Reset to start if already playing
-    audioRef.current.currentTime = 0;
-    audioRef.current.play().catch(err => console.log('Audio play error:', err));
-  };
+    // Clone the audio element to allow overlapping plays and avoid state issues
+    const audioClone = audioRef.current.cloneNode() as HTMLAudioElement;
+    audioClone.volume = 1;
+    audioClone.play().catch(err => console.log('Audio play error:', err));
+  }, []);
+
+  // Play Yusuf's synthesized tone - for 72s and 75s
+  const playYusufTone = useCallback(() => {
+    if (!audioContextRef.current) return;
+    
+    const ctx = audioContextRef.current;
+    
+    // Make sure context is running
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.5);
+  }, []);
 
   // Timer logic
   useEffect(() => {
@@ -87,14 +149,15 @@ export default function Home() {
         setSeconds(prevSeconds => {
           const newSeconds = prevSeconds + 1;
           
-          // Check for bell times (60, 70, 72, 75 seconds, then auto-reset at 120)
-          const timeInCycle = newSeconds % 120;
-          if (timeInCycle === 60 || timeInCycle === 70 || timeInCycle === 72 || timeInCycle === 75) {
-            playBell();
+          // Bell times: 60s & 70s = Xander bell, 72s & 75s = Yusuf tone
+          if (newSeconds === 60 || newSeconds === 70) {
+            playXanderBell();
+          } else if (newSeconds === 72 || newSeconds === 75) {
+            playYusufTone();
           }
           
           // Auto-stop at 120 seconds
-          if (newSeconds === 120) {
+          if (newSeconds >= 120) {
             setIsRunning(false);
             return 0;
           }
@@ -102,25 +165,22 @@ export default function Home() {
           return newSeconds;
         });
       }, 1000);
-    } else {
-      if (interval) clearInterval(interval);
     }
     
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isRunning]);
+  }, [isRunning, playXanderBell, playYusufTone]);
 
-  const toggleTimer = () => {
+  const toggleTimer = async () => {
+    // Always unlock audio on any button press
+    await unlockAudio();
+    
     if (isRunning) {
       setIsRunning(false);
       setSeconds(0);
     } else {
       setIsRunning(true);
-      // Preload audio on user interaction (required for mobile)
-      if (audioRef.current) {
-        audioRef.current.load();
-      }
     }
   };
 
@@ -150,7 +210,10 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-3 sm:p-6">
+    <div 
+      className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-3 sm:p-6"
+      onClick={unlockAudio} // Unlock audio on any tap on the page
+    >
       <video
         ref={videoRef}
         loop
@@ -161,7 +224,7 @@ export default function Home() {
       />
       
       <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-12 w-full max-w-md text-center">
-        <h1 className="text-xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-8">Luft Orgs FX Timer</h1>
+        <h1 className="text-xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-8">FX Timer</h1>
         
         <div className="mb-6 sm:mb-12">
           <div className="font-mono font-bold text-indigo-600 mb-2 sm:mb-4 leading-none whitespace-nowrap flex justify-center items-baseline gap-4" style={{ fontSize: 'clamp(2.5rem, 12vw, 5rem)' }}>
@@ -189,7 +252,7 @@ export default function Home() {
         </button>
         
         <div className="mt-4 sm:mt-8 text-xs sm:text-sm text-gray-400">
-          Bells at 60s, 70s, 72s, 75s • Auto-stop at 120s
+          🔔 60s & 70s (bell) • 🎵 72s & 75s (ring) • Auto-reset at 120s
         </div>
       </div>
     </div>
