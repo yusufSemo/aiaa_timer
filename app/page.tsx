@@ -9,7 +9,6 @@ export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [audioReady, setAudioReady] = useState(false);
 
   // Initialize audio elements
   useEffect(() => {
@@ -17,17 +16,6 @@ export default function Home() {
       // Xander's bell sound (mp3 file)
       const audio = new Audio('/bell.mp3');
       audio.preload = 'auto';
-      
-      // Set up event listeners to track when audio is ready
-      audio.addEventListener('canplaythrough', () => {
-        console.log('Audio ready to play');
-        setAudioReady(true);
-      });
-      
-      audio.addEventListener('error', (e) => {
-        console.error('Audio error:', e);
-      });
-      
       audioRef.current = audio;
       
       // Yusuf's synthesized tone (Web Audio API)
@@ -51,18 +39,15 @@ export default function Home() {
     if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
       try {
         await audioContextRef.current.resume();
-        console.log('AudioContext resumed');
       } catch (err) {
         console.log('AudioContext resume error:', err);
       }
     }
     
-    // Unlock HTML Audio element
+    // Prepare HTML Audio element (without playing audibly)
     if (audioRef.current) {
       try {
-        // Load and prepare the audio
         audioRef.current.load();
-        console.log('Audio loaded');
       } catch (err) {
         console.log('Audio load error:', err);
       }
@@ -75,7 +60,6 @@ export default function Home() {
       try {
         if ('wakeLock' in navigator && isRunning && navigator.wakeLock) {
           wakeLockRef.current = await navigator.wakeLock.request('screen');
-          console.log('Wake Lock activated');
         }
       } catch (err) {
         console.log('Wake Lock error:', err);
@@ -91,7 +75,6 @@ export default function Home() {
         try {
           await wakeLockRef.current.release();
           wakeLockRef.current = null;
-          console.log('Wake Lock released');
         } catch (err) {
           console.log('Wake Lock release error:', err);
         }
@@ -115,26 +98,10 @@ export default function Home() {
 
   // Play Xander's bell sound (mp3) - for 60s and 70s
   const playXanderBell = useCallback(() => {
-    console.log('Attempting to play Xander bell, audioRef:', !!audioRef.current);
+    if (!audioRef.current) return;
     
-    if (!audioRef.current) {
-      console.log('No audio ref');
-      return;
-    }
-    
-    // Reset and play
     audioRef.current.currentTime = 0;
-    const playPromise = audioRef.current.play();
-    
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          console.log('Xander bell playing successfully');
-        })
-        .catch(err => {
-          console.error('Audio play error:', err);
-        });
-    }
+    audioRef.current.play().catch(err => console.error('Audio play error:', err));
   }, []);
 
   // Play Yusuf's synthesized tone - for 72s and 75s
@@ -143,7 +110,6 @@ export default function Home() {
     
     const ctx = audioContextRef.current;
     
-    // Make sure context is running
     if (ctx.state === 'suspended') {
       ctx.resume();
     }
@@ -181,14 +147,10 @@ export default function Home() {
         setSeconds(prevSeconds => {
           const newSeconds = prevSeconds + 1;
           
-          console.log('Timer tick:', newSeconds);
-          
           // Bell times: 60s & 70s = Xander bell, 72s & 75s = Yusuf tone
           if (newSeconds === 60 || newSeconds === 70) {
-            console.log('Playing Xander bell at', newSeconds);
             playXanderBellRef.current();
           } else if (newSeconds === 72 || newSeconds === 75) {
-            console.log('Playing Yusuf tone at', newSeconds);
             playYusufToneRef.current();
           }
           
@@ -216,26 +178,8 @@ export default function Home() {
       setIsRunning(false);
       setSeconds(0);
     } else {
-      // Test play the audio to make sure it works (iOS requirement)
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        try {
-          await audioRef.current.play();
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-          console.log('Audio test play successful');
-        } catch (err) {
-          console.error('Audio test play failed:', err);
-        }
-      }
       setIsRunning(true);
     }
-  };
-
-  // Test button to verify audio works
-  const testSound = async () => {
-    await unlockAudio();
-    playXanderBell();
   };
 
   const getNextBellTime = (currentSeconds: number): number => {
@@ -302,11 +246,9 @@ export default function Home() {
           {isRunning ? 'Stop' : 'Start'}
         </button>
         
-
         <div className="mt-4 sm:mt-8 text-xs sm:text-sm text-gray-400">
           🔔 60s & 70s (bell) • 🎵 72s & 75s (ring) • Auto-reset at 120s
         </div>
-        
       </div>
     </div>
   );
