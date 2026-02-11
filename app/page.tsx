@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 
 export default function Home() {
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [isStopped, setIsStopped] = useState<boolean>(false);
   const [seconds, setSeconds] = useState<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -175,9 +176,15 @@ export default function Home() {
     await unlockAudio();
     
     if (isRunning) {
+      // Running -> Stopped (freeze the display)
       setIsRunning(false);
+      setIsStopped(true);
+    } else if (isStopped) {
+      // Stopped -> Reset
+      setIsStopped(false);
       setSeconds(0);
     } else {
+      // Idle -> Running
       setIsRunning(true);
     }
   };
@@ -207,6 +214,22 @@ export default function Home() {
     return '';
   };
 
+  const getButtonLabel = (): string => {
+    if (isRunning) return 'Stop';
+    if (isStopped) return 'Reset';
+    return 'Start';
+  };
+
+  const getButtonStyle = (): string => {
+    if (isRunning) {
+      return 'bg-red-500 active:bg-red-600 text-white shadow-lg shadow-red-500/50';
+    }
+    if (isStopped) {
+      return 'bg-amber-500 active:bg-amber-600 text-white shadow-lg shadow-amber-500/50';
+    }
+    return 'bg-indigo-500 active:bg-indigo-600 text-white shadow-lg shadow-indigo-500/50';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-3 sm:p-6">
       <video
@@ -231,19 +254,20 @@ export default function Home() {
             )}
           </div>
           <div className="text-sm sm:text-lg text-gray-600 font-medium">
-            {seconds < 75 ? `Next bell in ${getNextBellTime(seconds)}s` : `Resets in ${getNextBellTime(seconds)}s`}
+            {isStopped
+              ? 'Stopped — press Reset to clear'
+              : seconds < 75
+                ? `Next bell in ${getNextBellTime(seconds)}s`
+                : `Resets in ${getNextBellTime(seconds)}s`
+            }
           </div>
         </div>
         
         <button
           onClick={toggleTimer}
-          className={`w-full py-5 sm:py-6 px-6 rounded-2xl text-xl sm:text-3xl font-bold transition-all duration-200 active:scale-95 touch-manipulation ${
-            isRunning
-              ? 'bg-red-500 active:bg-red-600 text-white shadow-lg shadow-red-500/50'
-              : 'bg-indigo-500 active:bg-indigo-600 text-white shadow-lg shadow-indigo-500/50'
-          }`}
+          className={`w-full py-5 sm:py-6 px-6 rounded-2xl text-xl sm:text-3xl font-bold transition-all duration-200 active:scale-95 touch-manipulation ${getButtonStyle()}`}
         >
-          {isRunning ? 'Stop' : 'Start'}
+          {getButtonLabel()}
         </button>
         
         <div className="mt-4 sm:mt-8 text-xs sm:text-sm text-gray-400">
